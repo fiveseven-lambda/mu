@@ -3,6 +3,7 @@
 #include <cstdarg>
 #include <vector>
 #include <stack>
+#include <memory>
 
 struct Char{
 	int c;
@@ -70,7 +71,7 @@ public:
 	}
 };
 
-enum Type { Space, Digit, Alphabet, Operator };
+enum class Type { Space, Digit, Alphabet, Operator };
 
 Type check_type(char c){
 	if(isspace(c)){
@@ -96,6 +97,59 @@ public:
 	}
 };
 
+class Operator{
+public:
+	virtual void apply(std::stack<int> &) = 0;
+	virtual int priority() = 0;
+};
+class Plus: public Operator{
+public:
+	void apply(std::stack<int> &stack){
+		int tmp = stack.top();
+		stack.pop();
+		stack.top() += tmp;
+	}
+	int priority(){
+		return 0;
+	}
+};
+class Minus: public Operator{
+public:
+	void apply(std::stack<int> &stack){
+		int tmp = stack.top();
+		stack.pop();
+		stack.top() -= tmp;
+	}
+	int priority(){
+		return 0;
+	}
+};
+class Product: public Operator{
+public:
+	void apply(std::stack<int> &stack){
+		int tmp = stack.top();
+		stack.pop();
+		stack.top() *= tmp;
+	}
+	int priority(){
+		return 1;
+	}
+};
+std::unique_ptr<Operator> getop(const std::string &str){
+	Operator *ret;
+	if(str == "+"){
+		ret = new Plus();
+	}else if(str == "-"){
+		ret = new Minus();
+	}else if(str == "*"){
+		ret = new Product();
+	}else{
+		fprintf(stderr, "unknown operator %s\n", str);
+	}
+	return std::unique_ptr<Operator>(ret);
+}
+
+
 int main(){
 	Source source("test");
 	std::vector<Token> token;
@@ -113,6 +167,7 @@ int main(){
 	}
 
 	std::stack<int> stack;
+	std::stack<std::unique_ptr<Operator>> op;
 	for(const Token &i : token){
 		if(i.type == Type::Digit){
 			int tmp = 0;
@@ -121,24 +176,17 @@ int main(){
 			}
 			stack.push(tmp);
 		}else if(i.type == Type::Operator){
-			if(i.getstr() == "+"){
-				int a, b;
-				a = stack.top();
-				stack.pop();
-				b = stack.top();
-				stack.pop();
-				stack.push(a + b);
-			}else if(i.getstr() == "*"){
-				int a, b;
-				a = stack.top();
-				stack.pop();
-				b = stack.top();
-				stack.pop();
-				stack.push(a * b);
-			}else{
-				std::cerr << "error: unknown operator \"" << i.getstr() << '\"' << std::endl;
+			std::unique_ptr<Operator> tmp = getop(i.getstr());
+			while(!op.empty() && op.top()->priority() >= tmp->priority()){
+				op.top()->apply(stack);
+				op.pop();
 			}
+			op.push(std::move(tmp));
 		}
+	}
+	while(!op.empty()){
+		op.top()->apply(stack);
+		op.pop();
 	}
 	for(; !stack.empty(); stack.pop()){
 		std::cout << stack.top() << std::endl;
